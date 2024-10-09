@@ -1,11 +1,90 @@
-
 from web3 import Web3
 from eth_abi import encode
 import hashlib
 import json
 import os
 import requests
+from hexbytes import HexBytes
 from constants import BLOCKSCOUT_API_BASE
+from web3.datastructures import AttributeDict
+from dotenv import load_dotenv
+import os
+import time
+import sys
+
+load_dotenv()
+
+def deploy_create_x(web3, create_x, creation_code, salt):
+    # Convert salt to bytes32
+    if isinstance(salt, int):
+        salt_bytes32 = salt.to_bytes(32, 'big')
+    elif isinstance(salt, str):
+        if salt.startswith('0x'):
+            salt_bytes32 = bytes.fromhex(salt[2:])
+        else:
+            salt_bytes32 = bytes.fromhex(salt)
+    else:
+        raise ValueError("Salt must be an integer or a hex string")
+
+    # Ensure salt_bytes32 is exactly 32 bytes
+    if len(salt_bytes32) != 32:
+        raise ValueError("Salt must be exactly 32 bytes long")
+
+    # Load private key from .env file
+    private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
+    if not private_key:
+        raise ValueError("Private key not found in .env file")
+
+    # Get the account from the private key
+    account = web3.eth.account.from_key(private_key)
+    print(f"Account address: {account.address}")
+
+    priority_fee = int(1e5)
+    max_fee_per_gas = web3.eth.gas_price
+    # Build the transaction
+    transaction = create_x.functions.deployCreate2(salt_bytes32, creation_code).build_transaction({
+        'from': account.address,
+        'gas': 2000000,  # Adjust gas limit as needed
+        'maxFeePerGas': max_fee_per_gas,
+        'maxPriorityFeePerGas': priority_fee,
+        'nonce': web3.eth.get_transaction_count(account.address),
+        'chainId': web3.eth.chain_id
+    })
+
+    # Sign the transaction
+    signed_txn = account.sign_transaction(transaction)
+
+    # Send the transaction
+    try:
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        print(f'Sending txn: {tx_hash.hex()}')
+        
+        # Wait for the transaction receipt with a loading animation and timeout
+        print("Waiting for transaction to be mined", end="")
+        spinner = "|/-\\"
+        idx = 0
+        start_time = time.time()
+        while True:
+            if time.time() - start_time > 100:  # 100 seconds timeout
+                print("\nTransaction mining timed out after 100 seconds.")
+                return None
+            try:
+                tx_receipt = web3.eth.get_transaction_receipt(tx_hash)
+                if tx_receipt is not None:
+                    break
+            except Exception:
+                pass
+            sys.stdout.write(f"\rWaiting for transaction to be mined {spinner[idx % len(spinner)]}")
+            sys.stdout.flush()
+            idx += 1
+            time.sleep(0.1)
+        
+        print(f"\nTransaction successful. Transaction hash: {tx_receipt.transactionHash.hex()}")
+    except Exception as e:
+        print(f"\nError sending transaction: {str(e)}")
+        return None
+
+    return tx_receipt.contractAddress
 
 def get_creation_code(contract_address):
     url = f"https://eth.blockscout.com/api/v2/smart-contracts/{contract_address}"
@@ -23,7 +102,7 @@ def has_code_at_address(web3, deployment_address):
 
 def emojify(some_bool):
     return "✅" if some_bool else "❌"
-    
+
 def generate_salt(salt_string):
     # Create a SHA-256 hash object
     hash_object = hashlib.sha256()
@@ -175,8 +254,45 @@ def fetch_creation_code(address):
     if not success:
         print(f'API request to get creation code for {address} failed with status code {response.status_code}')
         return None
+    if 'creation_bytecode' not in response.json():
+        print(f'No creation bytecode found for {address}')
+        raise Exception(f'No creation bytecode found via API for {address} | {url}')
     creation_code = response.json()['creation_bytecode']
     if not creation_code or creation_code == '0x':
         print(f'Creation code for {address} is empty')
         return None
     return creation_code
+
+def save_file(data):
+    """Save the contract_data dictionary to a JSON file."""
+    try:
+        with open('cached_data.json', 'w') as f:
+            json.dump(data, f, indent=4, cls=CustomJSONEncoder)
+        print("Contract data successfully saved to cached_data.json")
+    except Exception as e:
+        print(f"Error saving contract data: {e}")
+
+def load_file(file_name):
+    """Read the cached data from JSON file and return it as a dictionary."""
+    try:
+        with open(file_name, 'r') as f:
+            loaded_data = json.load(f)
+        print(f"Contract data successfully loaded from {file_name}")
+        return loaded_data
+    except FileNotFoundError:
+        print(f"{file_name} not found. No data loaded.")
+        return {}
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from {file_name}. No data loaded.")
+        return {}
+    except Exception as e:
+        print(f"Error loading contract data: {e}")
+        return {}
+    
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, HexBytes):
+            return obj.hex()
+        if isinstance(obj, AttributeDict):
+            return dict(obj)
+        return super().default(obj)

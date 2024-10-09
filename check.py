@@ -1,15 +1,14 @@
 from web3 import Web3
 import click
 import requests
-from utils import load_abi, fetch_creation_code, has_code_at_address, emojify
+from utils import load_abi, fetch_creation_code, has_code_at_address, emojify, deploy_create_x, generate_salt
 import tqdm
 import os
 from dotenv import load_dotenv
 import json
 from constants import ADDRESS_PROVIDER, BLOCKSCOUT_API_BASE, CREATE_X_ADDRESS, NETWORKS
 from addresses import V3_PROTOCOL_ADDRESSES
-from web3.datastructures import AttributeDict
-from hexbytes import HexBytes
+
 
 load_dotenv()
 
@@ -20,22 +19,6 @@ ZERO_ADDRESS = '0x' + '0' * 40
 CREATE_X = None
 
 latest_release = None
-contract_data = {
-    'accountant_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'registry_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'vault_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'splitter_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'tokenized_strategy': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'release_registry': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'base_fee_provider': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'apr_oracle': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'common_report_trigger': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'keeper': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'role_manager_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'allocator_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'registry_factory': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''},
-    'router': {'id': '', 'creation_bytecode': '', 'address': '', 'salt': ''}
-}
 
 
 
@@ -45,71 +28,135 @@ def cli():
 
 @cli.command()
 def check():
-    global web3, contract_data
+    global web3
     while web3 is None:
         web3 = handle_rpc(rpc)
 
     load_create_x()
 
-    
+    while True:
+        # Present network options to the user
+        print("\nSelect a network:")
+        print(f"{'ID':<8} {'Network':<20}")
+        print("-" * 28)
+        print(f"{'0':<8} {'🌐 Custom RPC':<20}")
+        for chain_id, info in NETWORKS.items():
+            print(f"{chain_id:<8} {info['name']:<20}")
         
+        choice = click.prompt("\nEnter the chain ID or '0' for Custom RPC", type=int)
+        
+        if choice == 0:
+            custom_rpc = click.prompt("Enter custom RPC URL")
+            web3 = handle_rpc(custom_rpc)
+            chain_id = web3.eth.chain_id
+        else:
+            chain_id = choice
+            if chain_id in NETWORKS:
+                web3 = handle_rpc(NETWORKS[chain_id]['rpc'])
+            else:
+                print(f"Chain ID {chain_id} not found in known networks. Please try again.")
+                continue
+        
+        if print_chain_deployment_report():
+            break
+        else:
+            # Ask if the user wants to deploy the V3 protocol
+            chain_name = NETWORKS[chain_id]['name']
+            deploy_choice = click.confirm(
+                f"Would you like to deploy the V3 protocol to {chain_name} (Chain ID: {chain_id})?",
+                default=False
+            )
+            
+            if deploy_choice:
+                print(f"Initiating deployment process for {chain_name}...")
+                address = contract_data['init_gov']['address']
+                salt = contract_data['address_provider']['salt_preimage']
+                creation_code = fetch_creation_code(address)
+                deploy_create_x(web3, CREATE_X, creation_code, salt)
+            else:
+                print("Deployment cancelled. Returning to chain selection...")
+            
+            # Whether the user chose to deploy or not, we'll break the loop to re-run the chain selection
+            break
 
-    # compute_create2(contract_data)
+    load_create_x()
+    # load_address_provider_data()
 
 
-    for chain_id, _rpc in RPCS.items():
-        web3 = handle_rpc(_rpc)
-        print_chain_deployment_report()
-
-
-
+def color_address(is_true, value):
+    color = "\033[92m" if is_true else "\033[93m"
+    return f"{color}{value}\033[0m"
 
 
 def print_chain_deployment_report():
     global address_provider, contract_data, latest_release
+    chain_id = web3.eth.chain_id
     address_provider = web3.eth.contract(address=ADDRESS_PROVIDER, abi=load_abi('AddressProvider'))
     print("-" * 94)  # Separator line
     contracts = []
-    for key, info in V3_PROTOCOL_ADDRESSES.items():
+    protocol_deployed = True
+    for key, info in tqdm.tqdm(V3_PROTOCOL_ADDRESSES.items(), desc="Loading Yearn V3 Protocol data"):
+        if key == 'address_provider':
+            if has_code_at_address(web3, info['address']):
+                continue
+            protocol_deployed = False
+            return protocol_deployed
         id = web3.keccak(text=info['id'])
         address = info['address']
-        provider_address = address_provider.functions.getAddress(id).call()
+        try:
+            address_from_provider = address_provider.functions.getAddress(id).call()
+        except Exception as e:
+            print(f"Error fetching address from provider: {str(e)}")
+            address_from_provider = None
         if key == 'vault_factory':
             release_registry = web3.eth.contract(address=V3_PROTOCOL_ADDRESSES['release_registry']['address'], abi=load_abi('ReleaseRegistry'))
-            provider_address = release_registry.functions.latestFactory().call()
-        is_set_emoji = emojify(provider_address == address)
-        if key == 'tokenized_strategy':
+            address_from_provider = release_registry.functions.latestFactory().call()
+        is_set_emoji = emojify(address_from_provider == address)
+        if key in ['tokenized_strategy', 'vault_implementation']:
             is_set_emoji = '⚠️'
-        deployed = emojify(has_code_at_address(web3, address))
-        contracts.append((key, address, deployed, is_set_emoji))
+        deployed = has_code_at_address(web3, address)
+        computed_address = None
+        if address and not deployed: # It is possible that 
+            computed_address = compute_create2_address(CREATE_X_ADDRESS, info['salt'], fetch_creation_code(address))
+            deployed = has_code_at_address(web3, computed_address)
+        deployed = emojify(deployed)
+        contracts.append((key, address, deployed, is_set_emoji, computed_address))
+    
+    if not protocol_deployed:
+        click.echo(click.style(f'\nError: V3 Protocol not deployed on {NETWORKS[chain_id]["name"]} chain id {chain_id}\n', fg='red', bold=True))
+        click.echo(click.style(f'Returning to chain selection...'))
+        return protocol_deployed
     
     while True:
         print(f"\033[1m{'Contract':<24} | {'Address':<42} | {'Deployed':<8} | {'Addr Provider Set':<16}\033[0m")
         print("-" * 94)  # Separator line
-        for i, (key, address, deployed, is_set_emoji) in enumerate(contracts, 1):
-            print(f"{i}. \033[1m{key:<24}\033[0m | \033[94m{address:<42}\033[0m | {deployed} | {is_set_emoji}")
+        for i, (key, address, deployed, is_set_emoji, computed_address) in enumerate(contracts, 1):
+            print(f"{i}. \033[1m{key:<24}\033[0m | {color_address(address and (not computed_address or computed_address == address), ZERO_ADDRESS if not address else address)} | {deployed}\033[0m | {is_set_emoji}\033[0m")
         
-        print("\nEnter the number of the contract you want to interact with, or 'q' to quit:")
-        choice = click.prompt("Your choice", type=str)
+        print("\nEnter the number of the contract you want to interact with, or '0' to quit:")
+        choice = click.prompt("Your choice", type=int)
         
-        if choice.lower() == 'q':
+        if choice == 0:
             break
         
-        try:
-            index = int(choice) - 1
-            if 0 <= index < len(contracts):
-                selected_contract = contracts[index]
-                interact_with_contract(selected_contract)
-            else:
-                print("Invalid selection. Please try again.")
-        except ValueError:
-            print("Invalid input. Please enter a number or 'q' to quit.")
+        index = choice - 1
+        if 0 <= index < len(contracts):
+            selected_contract = contracts[index]
+            interact_with_contract(selected_contract)
+        else:
+            print("Invalid selection. Please try again.")
+
+    return protocol_deployed
 
 def interact_with_contract(contract):
-    key, address, deployed, is_set_emoji = contract
+    key, address, deployed, is_set_emoji, computed_address = contract
     print(f"\nYou selected: {key}")
-    print(f"Address: {address}")
-    print(f"Deployed: {deployed}")
+    print(f"Mainnet address: {address}")
+    if computed_address:
+        has_code = has_code_at_address(web3, computed_address)
+        print(f"Computed deploy address: {computed_address} | {'Already deployed!' if has_code else 'Not yet deployed'} {emojify(has_code_at_address(web3, computed_address))}")
+    else:
+        print(f"Deployed: {deployed}")
     print(f"Address Provider Set: {is_set_emoji}")
     
     # Add more interactive options here
@@ -120,14 +167,16 @@ def interact_with_contract(contract):
     action = click.prompt("Your choice", type=int)
     
     if action == 1:
-        deploy(address)
+        info = V3_PROTOCOL_ADDRESSES[key]
+        creation_code = fetch_creation_code(address)
+        print(f'Deploying {key} with CREATEX...')
+        deploy_create_x(web3, CREATE_X, creation_code, info['salt'])
+
     elif action == 2:
         return
     else:
         print("Invalid choice. Returning to main menu.")
 
-def deploy():
-    pass
 
 def load_address_provider_data():
     global address_provider, contract_data, latest_release
@@ -136,7 +185,13 @@ def load_address_provider_data():
         id = web3.keccak(text=info['id'])
         address = info['address']
         provider_address = address_provider.functions.getAddress(id).call()
-        print(f"\033[1m{key:<22}\033[0m | \033[94m{address:<42}\033[0m | {emojify(has_code_at_address(web3, address))} | {emojify(provider_address == address)}")
+        has_code = has_code_at_address(web3, address)
+        if not has_code: # It is possible that 
+            computed_address = compute_create2_address(address, info['salt'], fetch_creation_code(address))
+            print(f'Computed Address: {computed_address} | Salt {info["salt"]}')
+            has_code = has_code_at_address(web3, computed_address)
+        
+        print(f"\033[1m{key:<22}\033[0m | \033[94m{address:<42}\033[0m | {emojify(has_code)} | {emojify(provider_address == address)}")
         # contract_data[key]['address'] = address
     #     if address != ZERO_ADDRESS:
     #         creation_code = fetch_creation_code(address)
@@ -181,27 +236,25 @@ def compute_create2_address(factory, salt, creation_code):
         raise ValueError("Salt must be either an integer, a hexadecimal string, or bytes")
 
     init_code_hash = web3.keccak(hexstr=creation_code)
-    create_x = CREATE_X.functions.computeCreate2Address(salt, init_code_hash, factory).call()
-    # Compute init_code_hash
-    
-    
+    # address = CREATE_X.functions.computeCreate2Address(salt, init_code_hash, factory).call()
+
     # Compute CREATE2 address
-    address = Web3.to_checksum_address(
+    address = web3.to_checksum_address(
         web3.keccak(
             b'\xff' +
-            Web3.to_bytes(hexstr=factory) +
+            web3.to_bytes(hexstr=factory) +
             salt +
             init_code_hash
         )[12:]
     )
     
-    return address, create_x
+    return address
 
 def handle_rpc(_rpc=None):
     global web3
     while not _rpc or _rpc is None:
         print("No RPC URL provided.")
-        rpc = click.prompt('Please provide an RPC URL')
+        rpc = click.prompt('Please provide an RPC URL', type=int)
 
     web3 = Web3(Web3.HTTPProvider(_rpc))
 
@@ -217,39 +270,6 @@ def load_create_x():
     global CREATE_X
     CREATE_X = web3.eth.contract(address=CREATE_X_ADDRESS, abi=load_abi('CreateX'))
 
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, HexBytes):
-            return obj.hex()
-        if isinstance(obj, AttributeDict):
-            return dict(obj)
-        return super().default(obj)
-
-def save_contract_data(data):
-    """Save the contract_data dictionary to a JSON file."""
-    try:
-        with open('cached_data.json', 'w') as f:
-            json.dump(data, f, indent=4, cls=CustomJSONEncoder)
-        print("Contract data successfully saved to cached_data.json")
-    except Exception as e:
-        print(f"Error saving contract data: {e}")
-
-def load_data():
-    """Read the cached data from JSON file and return it as a dictionary."""
-    try:
-        with open('cached_data.json', 'r') as f:
-            loaded_data = json.load(f)
-        print("Contract data successfully loaded from cached_data.json")
-        return loaded_data
-    except FileNotFoundError:
-        print("cached_data.json not found. No data loaded.")
-        return {}
-    except json.JSONDecodeError:
-        print("Error decoding JSON from cached_data.json. No data loaded.")
-        return {}
-    except Exception as e:
-        print(f"Error loading contract data: {e}")
-        return {}
     
 if __name__ == "__main__":
     cli()
