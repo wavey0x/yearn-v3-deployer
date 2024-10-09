@@ -1,4 +1,3 @@
-from web3 import Web3
 from eth_abi import encode
 import hashlib
 import json
