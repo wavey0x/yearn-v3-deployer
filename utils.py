@@ -21,7 +21,6 @@ def compute_create2_address(web3,factory, salt, creation_code):
             raise ValueError("Salt integer must be 32 bytes or less")
         salt = salt.to_bytes(32, byteorder='big')
     elif isinstance(salt, str):
-        print(f"Salt: {salt}")
         if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
             raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
         salt = salt[2:] if salt.startswith('0x') else salt
@@ -59,7 +58,7 @@ def deploy_create_x(web3, create_x, creation_code, salt):
     # Get the account from the private key
     deployment_address = compute_create2_address(web3, create_x.address, web3.keccak(hexstr=salt).hex(), creation_code)
     if has_code_at_address(web3, deployment_address):
-        print(f"Contract already deployed at {deployment_address}. Exiting.")
+        print(f"Contract already deployed at {deployment_address}. Exiting")
         return deployment_address
     account = web3.eth.account.from_key(private_key)
     print(f"Account address: {account.address}")
