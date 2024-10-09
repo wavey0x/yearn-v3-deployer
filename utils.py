@@ -245,3 +245,46 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, AttributeDict):
             return dict(obj)
         return super().default(obj)
+    
+def get_source_from_etherscan(web3, address):
+    ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
+    url = f'https://api.etherscan.io/api?module=contract&action=getsourcecode&address={address}&apikey={ETHERSCAN_KEY}'
+    response = requests.get(url)
+    data = response.json()
+    if 'result' not in data:
+        print(f'No result found for {address}')
+        return None
+    if 'SourceCode' not in data['result'][0]:
+        print(f'No source code found for {address}')
+        return None
+    verification_data = {
+        'contract_name': data['result'][0]['ContractName'],
+        'source': data['result'][0]['SourceCode'],
+        'compiler_version': data['result'][0]['CompilerVersion'],
+        'constructor_args': data['result'][0]['ConstructorArguments'],
+        'optimization_used': data['result'][0]['OptimizationUsed'],
+        'runs': data['result'][0]['Runs'],
+        'license': data['result'][0]['LicenseType'],
+        'chain_id': web3.eth.chain_id,
+        'code_format': 'solidity-single-file',
+    }
+    return verification_data
+
+def verify_contract(address, verification_data):
+    ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
+    url = f'https://api.etherscan.io/api?module=contract&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
+    data = {
+        'chainId': verification_data['chain_id'],
+        'codeformat': verification_data['code_format'],
+        'sourceCode': verification_data['source'],
+        'constructorArguements': verification_data['constructor_args'],
+        'contractaddress': address,
+        'contractname': verification_data['contract_name'],
+        'compilerversion': verification_data['compiler_version'],
+        'optimizationUsed': verification_data['optimization_used'],
+        'runs': verification_data['runs'],
+        'licenseType': verification_data['license']
+    }
+    response = requests.post(url, data=data)
+    print(response.json())
+    return response.json()
