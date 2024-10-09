@@ -14,37 +14,63 @@ import sys
 
 load_dotenv()
 
-def deploy_create_x(web3, create_x, creation_code, salt):
-    # Convert salt to bytes32
+def compute_create2_address(web3,factory, salt, creation_code):
+    global CREATE_X
     if isinstance(salt, int):
-        salt_bytes32 = salt.to_bytes(32, 'big')
+        if salt.bit_length() > 256:
+            raise ValueError("Salt integer must be 32 bytes or less")
+        salt = salt.to_bytes(32, byteorder='big')
     elif isinstance(salt, str):
-        if salt.startswith('0x'):
-            salt_bytes32 = bytes.fromhex(salt[2:])
-        else:
-            salt_bytes32 = bytes.fromhex(salt)
-    else:
-        raise ValueError("Salt must be an integer or a hex string")
+        print(f"Salt: {salt}")
+        if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
+            raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
+        salt = salt[2:] if salt.startswith('0x') else salt
+        # Convert hex string to bytes
+        salt = bytes.fromhex(salt)
 
-    # Ensure salt_bytes32 is exactly 32 bytes
-    if len(salt_bytes32) != 32:
-        raise ValueError("Salt must be exactly 32 bytes long")
+    init_code_hash = web3.keccak(hexstr=creation_code)
 
+    # Compute CREATE2 address
+    address = web3.to_checksum_address(
+        web3.keccak(
+            b'\xff' +
+            web3.to_bytes(hexstr=factory) +
+            salt +
+            init_code_hash
+        )[12:]
+    )
+    
+    return address
+
+def deploy_create_x(web3, create_x, creation_code, salt):
+    # Validate salt
+    if isinstance(salt, int):
+        if salt.bit_length() > 256:
+            raise ValueError("Salt integer must be 32 bytes or less")
+        salt = salt.to_bytes(32, byteorder='big')
+    elif isinstance(salt, str):
+        if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
+            raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
     # Load private key from .env file
     private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
     if not private_key:
         raise ValueError("Private key not found in .env file")
 
     # Get the account from the private key
+    deployment_address = compute_create2_address(web3, create_x.address, web3.keccak(hexstr=salt).hex(), creation_code)
+    if has_code_at_address(web3, deployment_address):
+        print(f"Contract already deployed at {deployment_address}. Exiting.")
+        return deployment_address
     account = web3.eth.account.from_key(private_key)
     print(f"Account address: {account.address}")
 
     priority_fee = int(1e5)
     max_fee_per_gas = web3.eth.gas_price
     # Build the transaction
-    transaction = create_x.functions.deployCreate2(salt_bytes32, creation_code).build_transaction({
+
+    transaction = create_x.functions.deployCreate2(salt, creation_code).build_transaction({
         'from': account.address,
-        'gas': 2000000,  # Adjust gas limit as needed
+        'gas': 20000000,  # Adjust gas limit as needed
         'maxFeePerGas': max_fee_per_gas,
         'maxPriorityFeePerGas': priority_fee,
         'nonce': web3.eth.get_transaction_count(account.address),
@@ -54,10 +80,9 @@ def deploy_create_x(web3, create_x, creation_code, salt):
     # Sign the transaction
     signed_txn = account.sign_transaction(transaction)
 
-    # Send the transaction
     try:
         tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
-        print(f'Sending txn: {tx_hash.hex()}')
+        print(f'Sending txn: 0x{tx_hash.hex()}')
         
         # Wait for the transaction receipt with a loading animation and timeout
         print("Waiting for transaction to be mined", end="")
@@ -79,12 +104,13 @@ def deploy_create_x(web3, create_x, creation_code, salt):
             idx += 1
             time.sleep(0.1)
         
-        print(f"\nTransaction successful. Transaction hash: {tx_receipt.transactionHash.hex()}")
     except Exception as e:
-        print(f"\nError sending transaction: {str(e)}")
+        print(f"\nError processing transaction: {str(e)}")
         return None
 
-    return tx_receipt.contractAddress
+    # Process all events in the receipt
+    print(f"\nDeployed at: \033[92m{deployment_address}\033[0m\n")
+    return deployment_address
 
 def get_creation_code(contract_address):
     url = f"https://eth.blockscout.com/api/v2/smart-contracts/{contract_address}"
@@ -114,82 +140,7 @@ def generate_salt(salt_string):
     salt = int(hex_hash, 16)
     return salt
 
-def compute_deployment_address():
-    pass
-def encode_constructor_args():
-    pass
 
-def compute_deployment_address(contract_name, contract_data, selected_version):
-    bytecode = contract_data['bytecode']
-    constructor_args = encode_constructor_args(contract_name, contract_data['abi'], selected_version)
-    if constructor_args:
-        bytecode += constructor_args[2:] if constructor_args.startswith('0x') else constructor_args
-    
-    # print(f"\n\nBytecode: {bytecode}\n\n")
-    create_x = web3.eth.contract(address=CREATE_X_ADDRESS, abi=load_abi('CreateX'))
-    salt = Web3.to_bytes(generate_salt(selected_version))
-    init_code_hash = Web3.keccak(text=bytecode)
-    # print(f"Salt: {salt}")
-    # print(f"Init code hash: {init_code_hash}")
-    deployment_address = create_x.functions.computeCreate2Address(Web3.to_bytes(salt), init_code_hash).call()
-    print(f'Deployment address: {deployment_address}')
-
-    return deployment_address
-    if has_code_at_address(web3, deployment_address):
-        print(f"Protocol already deployed on chain id {chain_id} at {deployment_address}. Exiting.")
-        return
-
-def encode_constructor_args(contract_name, abi, selected_version):
-    constructor_args = extract_constructor_args(abi)
-    if not constructor_args:
-        return None
-    contract = web3.eth.contract(abi=abi)
-    if contract_name == 'VaultFactory':
-        vault_implementation = '0xcA78AF7443f3F8FA0148b746Cb18FF67383CDF3f'
-        encoded_args = encode(
-            ['string', 'address', 'address'],
-            [
-                f'Yearn {selected_version} Vault Factory',
-                vault_implementation,
-                INIT_GOV
-            ]
-        )
-        return encoded_args.hex()
-    return None
-
-def deploy_contract(web3, create_x, salt, bytecode):
-    deployed_address = deploy_contract(web3, create_x, salt, bytecode)
-    
-    if deployed_address:
-        print(f"Contract deployed at address: {deployed_address}")
-        # Step 6: Cache deployment info
-        cache_deployment_info(chain_id, deployed_address)
-
-def deploy_contract(web3, create_x, salt, bytecode):
-    private_key = os.getenv('PRIVATE_KEY')
-    deployer = web3.eth.account.from_key(private_key)
-    try:
-        # Create transaction to deploy the contract
-        tx = create_x.functions.deployCreate2(
-            salt, bytecode
-        ).transact({
-            'from': deployer.address,
-            # 'gas': 10_000_000,  # Custom gas limit
-            'maxFeePerGas': web3.to_wei(10, 'gwei'),  # 10 gwei
-            'maxPriorityFeePerGas': web3.to_wei(0.001, 'gwei'),  # 1 gwei
-            'nonce': web3.eth.getTransactionCount(deployer.address)  # Set nonce if necessary
-        })
-        
-        signed_tx = web3.eth.account.sign_transaction(tx, private_key)
-        tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
-        tx_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
-
-        print(f"Transaction successful with receipt: {tx_receipt}")
-        return tx_receipt.contractAddress
-    
-    except Exception as e:
-        print(f"Error deploying contract: {e}")
-        return None
     
 def extract_constructor_args(abi):
     constructor = next((item for item in abi if item['type'] == 'constructor'), None)
