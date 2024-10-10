@@ -1,12 +1,12 @@
 from web3 import Web3
 import click
 import requests
-from utils import load_abi, fetch_creation_code, compute_create2_address, has_code_at_address, emojify, deploy_create_x, generate_salt
+from utils import load_abi, fetch_creation_code, compute_create2_address, has_code_at_address, emojify, deploy_create2, generate_salt
 import tqdm
 import os
 from dotenv import load_dotenv
 import json
-from constants import ADDRESS_PROVIDER, BLOCKSCOUT_API_BASE, CREATE_X_ADDRESS, NETWORKS
+from constants import ADDRESS_PROVIDER, NETWORKS
 from addresses import V3_PROTOCOL_ADDRESSES
 from eth_account import Account
 
@@ -17,7 +17,6 @@ class YearnV3Deployer:
         self.web3 = None
         self.address_provider = None
         self.rpc = os.getenv('ETH_RPC')
-        self.create_x = None
         self.contract_data = {}
         self.latest_release = None
         self.ZERO_ADDRESS = '0x' + '0' * 40
@@ -25,10 +24,6 @@ class YearnV3Deployer:
     def initialize(self):
         while self.web3 is None:
             self.web3 = self.handle_rpc(self.rpc)
-        self.load_create_x()
-
-    def load_create_x(self):
-        self.create_x = self.web3.eth.contract(address=CREATE_X_ADDRESS, abi=load_abi('CreateX'))
 
     def handle_rpc(self, _rpc=None):
         while not _rpc or _rpc is None:
@@ -105,8 +100,13 @@ class YearnV3Deployer:
                 is_set_emoji = '⚠️'
             deployed = has_code_at_address(self.web3, address)
             computed_address = None
-            if address and not deployed:
-                computed_address = compute_create2_address(self.web3, CREATE_X_ADDRESS, 0 if not info['salt'] else info['salt'], fetch_creation_code(address))
+            if address:
+                computed_address = compute_create2_address(
+                    self.web3, 
+                    info['deployer'], 
+                    0 if not info['salt'] else info['salt'], 
+                    fetch_creation_code(address)
+                )
                 deployed = has_code_at_address(self.web3, computed_address)
             deployed = emojify(deployed)
             self.contract_data[key] = {
@@ -185,8 +185,8 @@ class YearnV3Deployer:
             confirm = click.confirm("Do you want to proceed with the deployment?", default=False)
 
             if confirm:
-                print(f'Deploying {key} with CREATEX...')
-                deploy_create_x(self.web3, self.create_x, creation_code, info['salt_preimage'])
+                print(f'Deploying {key} to {NETWORKS[self.web3.eth.chain_id]["name"]} ...')
+                deploy_create2(self.web3, info['deployer'], info['salt_preimage'], creation_code)
             else:
                 print("Deployment cancelled.")
 
@@ -217,15 +217,15 @@ class YearnV3Deployer:
 
     def deploy_contract(self, contract_key):
         info = V3_PROTOCOL_ADDRESSES[contract_key]
-        salt = info['salt_preimage']
+        salt_preimage = info['salt_preimage']
         address = info['address']
         creation_code = fetch_creation_code(address)
-        computed_address = compute_create2_address(self.web3, CREATE_X_ADDRESS, info['salt'], creation_code)
+        computed_address = compute_create2_address(self.web3, info['deployer'], info['salt'], creation_code)
         
         if has_code_at_address(self.web3, computed_address):
             print(f'{contract_key.capitalize()} already deployed at {computed_address}!')
         else:
-            deploy_create_x(self.web3, self.create_x, creation_code, salt)
+            deploy_create2(self.web3, info['deployer'], salt_preimage, creation_code)
 
     def color_address(self, is_true, value):
         color = "\033[92m" if is_true else "\033[93m"

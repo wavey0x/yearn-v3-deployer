@@ -4,6 +4,11 @@ CREATE_X_ADDRESS = '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
 CREATE_2_DEPLOYER = '0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112'
 BLOCKSCOUT_API_BASE =  'https://eth.blockscout.com/api/v2/smart-contracts/'
 
+DEPLOYERS = {
+    'FACTORY':'0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112',
+    'CREATEX':'0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed',
+}
+
 NETWORKS = {
     1: {
         'name': 'Ethereum',

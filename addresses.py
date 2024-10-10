@@ -1,3 +1,12 @@
+"""
+STOP! Before modifying these addresses, please ensure the following...
+
+1. The following data is mainnet Ethereum data only
+2. Each address is the values for the latest canonical deployment of each contract
+3. salt_preimage is the value passed into the deployment transaction
+4. salt is the value used in the CREATE2 calculation. For createX deployments, this is different than the preimage, and can be found in the emit event.
+"""
+
 V3_PROTOCOL_ADDRESSES = {
     'init_gov': {
         'address': '0x6f3cBE2ab3483EC4BA7B672fbdCa0E9B33F88db8',
@@ -37,14 +46,14 @@ V3_PROTOCOL_ADDRESSES = {
     'vault_factory': {
         'address': '0x5577EdcB8A856582297CdBbB07055E6a6E38eb5f',
         'id': 'VAULT FACTORY',
-        'salt_preimage': '0x6b82dafe35e195e55829e589b42ab27ad15988b069b20615c136226c8a270865',
+        'salt_preimage': '0x4b47d8ec7a7a872cad215d467bfbd768c66bf241f9ca127d4a9acbc75332980a',
         'salt': '8E225A77447BAC3E72B29A580123019DC26A28EBD6D9BE4F8F396A1DF8677CCF',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'splitter_factory': {
         'address': '0xe28fCC9FB2998ba57754789F6666DAa8C815614D',
         'id': 'SPLITTER FACTORY',
-        'salt_preimage': '0x6d19e04f85bfa39ce8b6908668c46b2937461f0373aaa91c7619f2364545887d',
+        'salt_preimage': '0x4f63ede797a190c28b8121ae0f2ebc20ac89032ab047d98aeb464b20e2fcdf7a',
         'salt': '13ECA8D94F3DA78059363A546A770E520526A76D822F88F7E2500AFAD7332733',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
@@ -53,12 +62,12 @@ V3_PROTOCOL_ADDRESSES = {
         'id': 'TOKENIZED STRATEGY',
         'salt_preimage': '0x76ce3962b8fa14419a4050782902ebac2d936ba86eb83ca48b362c1cd2d244dc',
         'salt': '4AB76E39AC6D0E3B29FDFEB8BBA6D4B01E1826E4D6C59064A8965470F9B91E1B',
-        'deployer': '0x254A93feff3BEeF9cA004E913bB5443754e8aB19'
+        'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'release_registry': {
         'address': '0x990089173D5d5287c344092Be0bB37950A67d17B',
         'id': 'RELEASE REGISTRY',
-        'salt_preimage': '0x872491a30d60d598962de6e7b834ab76b2aa65fbab102c6ebaaae6acdc238822',
+        'salt_preimage': 61126846202173470780239454055476050204342965826331442198108521154130340972578,
         'salt': 61126846202173470780239454055476050204342965826331442198108521154130340972578,
         'deployer': '0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112'
     },
@@ -79,7 +88,7 @@ V3_PROTOCOL_ADDRESSES = {
     'common_report_trigger': {
         'address': '0xD98C652f02E7B987e0C258a43BCa9999DF5078cF',
         'id': 'COMMON REPORT TRIGGER',
-        'salt_preimage': '0x6d19e04f85bfa39ce8b6908668c46b2937461f0373aaa91c7619f2364545887d',
+        'salt_preimage': 96024494127036433653418792335021124045183520027330983676371068081276756155280,
         'salt': 96024494127036433653418792335021124045183520027330983676371068081276756155280,
         'deployer': '0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112'
     },

@@ -4,7 +4,7 @@ import json
 import os
 import requests
 from hexbytes import HexBytes
-from constants import BLOCKSCOUT_API_BASE
+from constants import BLOCKSCOUT_API_BASE, DEPLOYERS, CREATE_X_ADDRESS
 from web3.datastructures import AttributeDict
 from dotenv import load_dotenv
 import os
@@ -13,19 +13,32 @@ import sys
 
 load_dotenv()
 
-def compute_create2_address(web3,factory, salt, creation_code):
+def compute_create2_address(web3, factory, salt, creation_code, print_debug=False):
+    """
+    If using createx, salt must be the guarded salt generated internally by createx
+    """
     global CREATE_X
+    if print_debug:
+        print(f"Factory: {factory}")
+        print(f"Salt: {salt}")
+        print(f"Creation code: {creation_code[:30]}")
     if isinstance(salt, int):
         if salt.bit_length() > 256:
             raise ValueError("Salt integer must be 32 bytes or less")
-        salt = salt.to_bytes(32, byteorder='big')
+        salt = hex(salt)[2:]
     elif isinstance(salt, str):
         if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
             raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
         salt = salt[2:] if salt.startswith('0x') else salt
-        # Convert hex string to bytes
-        salt = bytes.fromhex(salt)
+        
 
+    # Note: We dont need this if we pass the original salt to createx
+    # For CreateX, the salt is a keccak256 hash of the original salt
+    # if factory == DEPLOYERS['CREATEX']:
+    #     salt = web3.keccak(hexstr=salt).hex()
+        
+    salt = web3.to_bytes(hexstr=salt) if isinstance(salt, str) else salt
+        
     init_code_hash = web3.keccak(hexstr=creation_code)
 
     # Compute CREATE2 address
@@ -40,40 +53,66 @@ def compute_create2_address(web3,factory, salt, creation_code):
     
     return address
 
-def deploy_create_x(web3, create_x, creation_code, salt):
+def deploy_create2(web3, factory, salt, creation_code):
+    if not has_code_at_address(web3, factory):
+        print(f"\n\033[91mError: Deployer {factory} does not exist on chain id {web3.eth.chain_id} ... Now exiting.\033[0m\n")
+        return
+    
     # Validate salt
     if isinstance(salt, int):
         if salt.bit_length() > 256:
             raise ValueError("Salt integer must be 32 bytes or less")
-        salt = salt.to_bytes(32, byteorder='big')
+        salt = salt.to_bytes(32, 'big').hex()
     elif isinstance(salt, str):
         if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
             raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
+        salt = salt[2:] if salt.startswith('0x') else salt
+    
+    final_salt = salt
+    if factory == DEPLOYERS['CREATEX']:
+        final_salt = web3.keccak(hexstr=salt).hex()
+
+    salt = web3.to_bytes(hexstr=salt)
+
     # Load private key from .env file
     private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
     if not private_key:
         raise ValueError("Private key not found in .env file")
 
     # Get the account from the private key
-    deployment_address = compute_create2_address(web3, create_x.address, web3.keccak(hexstr=salt).hex(), creation_code)
+    deployment_address = compute_create2_address(web3, factory, final_salt, creation_code)
+
     if has_code_at_address(web3, deployment_address):
-        print(f"Contract already deployed at {deployment_address}. Exiting")
+        print(f"Contract already deployed at {deployment_address}. Now exiting.")
         return deployment_address
     account = web3.eth.account.from_key(private_key)
-    print(f"Account address: {account.address}")
-
     priority_fee = int(1e5)
     max_fee_per_gas = web3.eth.gas_price
+    gas_limit = 20_000_000
+    print(f"Gas price: {max_fee_per_gas / 1e9:,.4f} gwei | Priority fee: {priority_fee / 1e9:,.4f} gwei | Gas limit: {gas_limit / 1e6:.2f}M")
     # Build the transaction
 
-    transaction = create_x.functions.deployCreate2(salt, creation_code).build_transaction({
-        'from': account.address,
-        'gas': 20000000,  # Adjust gas limit as needed
-        'maxFeePerGas': max_fee_per_gas,
-        'maxPriorityFeePerGas': priority_fee,
-        'nonce': web3.eth.get_transaction_count(account.address),
-        'chainId': web3.eth.chain_id
-    })
+    if factory == DEPLOYERS['CREATEX']:
+        create_x = web3.eth.contract(address=CREATE_X_ADDRESS, abi=load_abi('CreateX'))
+        transaction = create_x.functions.deployCreate2(salt, creation_code).build_transaction({
+            'from': account.address,
+            'gas': gas_limit,  # Adjust gas limit as needed
+            'maxFeePerGas': max_fee_per_gas,
+            'maxPriorityFeePerGas': priority_fee,
+            'nonce': web3.eth.get_transaction_count(account.address),
+            'chainId': web3.eth.chain_id
+        })
+    else:
+        factory = web3.eth.contract(address=factory, abi=load_abi('Create2Factory'))
+        salt = int.from_bytes(salt, 'big')
+        transaction = factory.functions.deploy(creation_code, salt).build_transaction({
+            'from': account.address,
+            'gas': gas_limit,  # Adjust gas limit as needed
+            'maxFeePerGas': max_fee_per_gas,
+            'maxPriorityFeePerGas': priority_fee,
+            'nonce': web3.eth.get_transaction_count(account.address),
+            'chainId': web3.eth.chain_id
+        })
 
     # Sign the transaction
     signed_txn = account.sign_transaction(transaction)
@@ -108,6 +147,12 @@ def deploy_create_x(web3, create_x, creation_code, salt):
 
     # Process all events in the receipt
     print(f"\nDeployed at: \033[92m{deployment_address}\033[0m\n")
+    print(f'Attempting to verify contract ...')
+    success = verify_contract(web3.eth.chain_id, deployment_address)
+    if not success:
+        print(f'Verification failed.')
+    else:
+        print(f'Verification successful!')
     return deployment_address
 
 def get_creation_code(contract_address):
@@ -246,7 +291,7 @@ class CustomJSONEncoder(json.JSONEncoder):
             return dict(obj)
         return super().default(obj)
     
-def get_source_from_etherscan(web3, address):
+def get_source_from_etherscan(chain_id, address):
     ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
     url = f'https://api.etherscan.io/api?module=contract&action=getsourcecode&address={address}&apikey={ETHERSCAN_KEY}'
     response = requests.get(url)
@@ -265,12 +310,12 @@ def get_source_from_etherscan(web3, address):
         'optimization_used': data['result'][0]['OptimizationUsed'],
         'runs': data['result'][0]['Runs'],
         'license': data['result'][0]['LicenseType'],
-        'chain_id': web3.eth.chain_id,
+        'chain_id': chain_id,
         'code_format': 'solidity-single-file',
     }
     return verification_data
 
-def verify_contract(address, verification_data):
+def _verify_contract(address, verification_data):
     ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
     url = f'https://api.etherscan.io/api?module=contract&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
     data = {
@@ -287,4 +332,8 @@ def verify_contract(address, verification_data):
     }
     response = requests.post(url, data=data)
     print(response.json())
-    return response.json()
+    return response.json()['status'] == '1' and response.json()['message'] == 'OK'
+
+def verify_contract(chain_id, address):
+    verification_data = get_source_from_etherscan(chain_id, address)
+    return _verify_contract(address, verification_data)
