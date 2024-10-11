@@ -1,11 +1,10 @@
 from web3 import Web3
 import click
 import requests
-from utils import load_abi, fetch_creation_code, compute_create2_address, has_code_at_address, emojify, deploy_create2, generate_salt
+from utils import load_abi, fetch_creation_code, verify_contract, compute_create2_address, has_code_at_address, emojify, is_contract_verified, deploy_create2, get_chain_name
 import tqdm
 import os
 from dotenv import load_dotenv
-import json
 from constants import ADDRESS_PROVIDER, NETWORKS
 from addresses import V3_PROTOCOL_ADDRESSES
 from eth_account import Account
@@ -16,14 +15,13 @@ class YearnV3Deployer:
     def __init__(self):
         self.web3 = None
         self.address_provider = None
-        self.rpc = os.getenv('ETH_RPC')
+        self.rpc = None
         self.contract_data = {}
         self.latest_release = None
         self.ZERO_ADDRESS = '0x' + '0' * 40
 
     def initialize(self):
-        while self.web3 is None:
-            self.web3 = self.handle_rpc(self.rpc)
+        pass
 
     def handle_rpc(self, _rpc=None):
         while not _rpc or _rpc is None:
@@ -41,7 +39,7 @@ class YearnV3Deployer:
         return self.web3
 
     def select_network(self):
-        print("\nSelect a network:")
+        print("\nSelect a network:\n")
         print(f"{'ID':<8} {'Network':<20}")
         print("-" * 28)
         print(f"{'0':<8} {'🌐 Custom RPC':<20}")
@@ -92,12 +90,13 @@ class YearnV3Deployer:
                         'address': address,
                         'deployed': emojify(False),
                         'is_set': emojify(False),
-                        'computed_address': self.ZERO_ADDRESS
+                        'computed_address': self.ZERO_ADDRESS,
+                        'is_verified': is_contract_verified(chain_id, address)
                     }
                     continue
             is_set_emoji = emojify(address_from_provider == address)
             if key in ['tokenized_strategy', 'vault_implementation']:
-                is_set_emoji = '⚠️'
+                is_set_emoji = '    '
             deployed = has_code_at_address(self.web3, address)
             computed_address = None
             if address:
@@ -114,24 +113,16 @@ class YearnV3Deployer:
                 'address': address,
                 'deployed': deployed,
                 'is_set': is_set_emoji,
-                'computed_address': computed_address
+                'computed_address': computed_address,
+                'is_verified': is_contract_verified(chain_id, computed_address if computed_address else address)
             }
 
         if not protocol_deployed:
-            click.echo(click.style(f'\nError: V3 Protocol not deployed on {NETWORKS[chain_id]["name"]} chain id {chain_id}\n', fg='red', bold=True))
-            click.echo(click.style(f'Returning to chain selection...'))
+            click.echo(click.style(f'\nNotice: V3 Protocol not deployed on {get_chain_name(chain_id)} chain id {chain_id}\n', fg='yellow', bold=True))
             return protocol_deployed
         
         while True:
-            print(f"\033[1m{'Contract':<24} | {'Address':<42} | {'Deployed':<8} | {'Addr Provider Set':<16}\033[0m")
-            print("-" * 94)  # Separator line
-            for i, (key, data) in enumerate(self.contract_data.items(), 1):
-                address = data['address']
-                deployed = data['deployed']
-                is_set_emoji = data['is_set']
-                computed_address = data['computed_address']
-                print(f"{i}. \033[1m{key:<24}\033[0m | {self.color_address(True, self.ZERO_ADDRESS if not address else address)} | {deployed}\033[0m | {is_set_emoji}\033[0m")
-            
+            self.display_contract_list()
             print("\nEnter the number of the contract you want to interact with, or '0' to quit:")
             choice = click.prompt("Your choice", type=int)
             
@@ -147,12 +138,24 @@ class YearnV3Deployer:
 
         return protocol_deployed
 
+    def display_contract_list(self):
+        print(f"\033[1m{'Contract':<28} | {'Address':<42} | {'Dplyd':<5} | {'Vrfd':<5} | {'Prvdr':<5} \033[0m")
+        print("-" * 110)  # Separator line
+        for i, (key, data) in enumerate(self.contract_data.items(), 1):
+            address = data['address']
+            deployed = data['deployed']
+            is_set_emoji = data['is_set']
+            computed_address = data['computed_address']
+            is_verified = data['is_verified']
+            print(f"{i:2}. {key:<24.24} | {self.color_address(True, self.ZERO_ADDRESS if not address else address):<42} | {deployed:<4} | {emojify(is_verified):<4} |{is_set_emoji:<4} ")
+
     def interact_with_contract(self, selected_contract):
         key = selected_contract['key']  # Get the key (contract name)
         data = self.contract_data[key]  # Get the data dictionary
         global_data = V3_PROTOCOL_ADDRESSES[key]
         print(f"\nYou selected: {key}")
         print(f"Mainnet address: {global_data['address']}")
+        has_code = False
         if data['computed_address']:
             has_code = has_code_at_address(self.web3, data['computed_address'])
             print(f"Computed deploy address: {data['computed_address']} | {'Already deployed!' if has_code else 'Not yet deployed'} {emojify(has_code)}")
@@ -163,7 +166,8 @@ class YearnV3Deployer:
         # Add more interactive options here
         print("\nWhat would you like to do?")
         print("1. Deploy")
-        print("2. Go Back")
+        print("2. Verify")
+        print("3. Go Back")
         
         action = click.prompt("Your choice", type=int)
         
@@ -185,15 +189,55 @@ class YearnV3Deployer:
             confirm = click.confirm("Do you want to proceed with the deployment?", default=False)
 
             if confirm:
-                print(f'Deploying {key} to {NETWORKS[self.web3.eth.chain_id]["name"]} ...')
+                chain_name = get_chain_name(self.web3.eth.chain_id)
+                print(f'Deploying {key} to {chain_name} ...')
                 deploy_create2(self.web3, info['deployer'], info['salt_preimage'], creation_code)
+                self.update_contract_data(key)
             else:
                 print("Deployment cancelled.")
 
         elif action == 2:
+            if has_code:
+                verify_contract(self.web3.eth.chain_id, data['computed_address'])
+                self.contract_data[key]['is_verified'] = is_contract_verified(self.web3.eth.chain_id, data['computed_address'])
+            else:
+                print("Contract not yet deployed. Please deploy the contract first.")
+        elif action == 3:
             return
         else:
             print("Invalid choice. Returning to main menu.")
+
+    def update_contract_data(self, key):
+        info = V3_PROTOCOL_ADDRESSES[key]
+        address = info['address']
+        id = self.web3.keccak(text=info['id'])
+        
+        try:
+            address_from_provider = self.address_provider.functions.getAddress(id).call()
+        except Exception as e:
+            print(f"Error fetching address from provider: {str(e)}")
+            address_from_provider = None
+
+        is_set_emoji = emojify(address_from_provider == address)
+        if key in ['tokenized_strategy', 'vault_implementation']:
+            is_set_emoji = '    '
+
+        computed_address = compute_create2_address(
+            self.web3, 
+            info['deployer'], 
+            0 if not info['salt'] else info['salt'], 
+            fetch_creation_code(address)
+        )
+        deployed = emojify(has_code_at_address(self.web3, computed_address))
+
+        self.contract_data[key] = {
+            'key': key,
+            'address': address,
+            'deployed': deployed,
+            'is_set': is_set_emoji,
+            'computed_address': computed_address,
+            'is_verified': is_contract_verified(self.web3.eth.chain_id, computed_address)
+        }
 
     def get_wallet_info(self, should_print=True):
         private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
@@ -228,7 +272,7 @@ class YearnV3Deployer:
             deploy_create2(self.web3, info['deployer'], salt_preimage, creation_code)
 
     def color_address(self, is_true, value):
-        color = "\033[92m" if is_true else "\033[93m"
+        color = "\033[94m" if is_true else "\033[93m"
         return f"{color}{value}\033[0m"
 
 @click.group()
@@ -245,8 +289,8 @@ def run():
         if deployer.print_chain_deployment_report():
             break
         else:
-            chain_name = NETWORKS[chain_id]['name']
             deployer.get_wallet_info(True)
+            chain_name = get_chain_name(chain_id)
             deploy_choice = click.confirm(
                 f"Would you like to deploy the V3 protocol to {chain_name} (Chain ID: {chain_id})?",
                 default=False

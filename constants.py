@@ -3,7 +3,8 @@ INIT_GOV = '0x6f3cBE2ab3483EC4BA7B672fbdCa0E9B33F88db8'
 CREATE_X_ADDRESS = '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
 CREATE_2_DEPLOYER = '0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112'
 BLOCKSCOUT_API_BASE =  'https://eth.blockscout.com/api/v2/smart-contracts/'
-
+ETHERSCAN_API_BASE = 'https://api.etherscan.io'
+ETHERSCAN_API_BASE_V2 = 'https://api.etherscan.io/v2'
 DEPLOYERS = {
     'FACTORY':'0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112',
     'CREATEX':'0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed',
@@ -40,5 +41,9 @@ NETWORKS = {
     252: {
         'name': 'Fraxtal',
         'rpc': 'https://rpc.frax.com'
+    },
+    56: {
+        'name': 'Binance Smart Chain',
+        'rpc': 'https://bsc.meowrpc.com',
     }
 }

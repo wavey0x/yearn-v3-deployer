@@ -1,3 +1,5 @@
+- `cp .env.example .env`
+- Fill out the `.env` file with the appropriate values
 - `python3 -m venv venv`
 - `source venv/bin/activate`
 - `pip install -r requirements.txt`

@@ -4,7 +4,7 @@ import json
 import os
 import requests
 from hexbytes import HexBytes
-from constants import BLOCKSCOUT_API_BASE, DEPLOYERS, CREATE_X_ADDRESS
+from constants import BLOCKSCOUT_API_BASE, DEPLOYERS, CREATE_X_ADDRESS, ETHERSCAN_API_BASE, NETWORKS, ETHERSCAN_API_BASE_V2
 from web3.datastructures import AttributeDict
 from dotenv import load_dotenv
 import os
@@ -12,6 +12,8 @@ import time
 import sys
 
 load_dotenv()
+
+ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
 
 def compute_create2_address(web3, factory, salt, creation_code, print_debug=False):
     """
@@ -98,7 +100,7 @@ def deploy_create2(web3, factory, salt, creation_code):
             'from': account.address,
             'gas': gas_limit,  # Adjust gas limit as needed
             'maxFeePerGas': max_fee_per_gas,
-            'maxPriorityFeePerGas': priority_fee,
+            # 'maxPriorityFeePerGas': priority_fee,
             'nonce': web3.eth.get_transaction_count(account.address),
             'chainId': web3.eth.chain_id
         })
@@ -147,12 +149,7 @@ def deploy_create2(web3, factory, salt, creation_code):
 
     # Process all events in the receipt
     print(f"\nDeployed at: \033[92m{deployment_address}\033[0m\n")
-    print(f'Attempting to verify contract ...')
-    success = verify_contract(web3.eth.chain_id, deployment_address)
-    if not success:
-        print(f'Verification failed.')
-    else:
-        print(f'Verification successful!')
+    verify_contract(web3.eth.chain_id, deployment_address)
     return deployment_address
 
 def get_creation_code(contract_address):
@@ -215,7 +212,7 @@ def get_contract_bytecode(contract_address, api_key):
         "action": "eth_getCode",
         "address": contract_address,
         "tag": "latest",  # Use 'latest' to get the most recent bytecode
-        "apikey": os.getenv('ETHERSCAN_KEY')
+        "apikey": ETHERSCAN_KEY
     }
     
     try:
@@ -292,8 +289,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
     
 def get_source_from_etherscan(chain_id, address):
-    ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
-    url = f'https://api.etherscan.io/api?module=contract&action=getsourcecode&address={address}&apikey={ETHERSCAN_KEY}'
+    url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=getsourcecode&address={address}&apikey={ETHERSCAN_KEY}'
     response = requests.get(url)
     data = response.json()
     if 'result' not in data:
@@ -315,9 +311,8 @@ def get_source_from_etherscan(chain_id, address):
     }
     return verification_data
 
-def _verify_contract(address, verification_data):
-    ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
-    url = f'https://api.etherscan.io/api?module=contract&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
+def _verify_contract(address, verification_data, print_debug=False):
+    url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
     data = {
         'chainId': verification_data['chain_id'],
         'codeformat': verification_data['code_format'],
@@ -331,9 +326,69 @@ def _verify_contract(address, verification_data):
         'licenseType': verification_data['license']
     }
     response = requests.post(url, data=data)
-    print(response.json())
-    return response.json()['status'] == '1' and response.json()['message'] == 'OK'
+    success = False
+    if print_debug:
+        print("Verification data:")
+        data_to_print = data.copy()
+        data_to_print['sourceCode'] = data_to_print['sourceCode'][:20] + '...'
+        print(json.dumps(data_to_print, indent=2, cls=CustomJSONEncoder))
+    try:
+        success = response.json()['status'] == '1' and response.json()['message'] == 'OK'
+        guid = response.json()['result']
+    except KeyError:
+        print(f'Unexpected response structure when verifying {data["contractaddress"]} on chain id: {data["chainId"]}:\n{response.json()}')
+        return False
+    if success:
+        print(f'Verification info submitted for {data["contractaddress"]} on chain id: {data["chainId"]}')
+    return guid
 
-def verify_contract(chain_id, address):
+def verify_contract(chain_id, address, print_debug=False, poll_interval=5):
+    if not isinstance(poll_interval, int):
+        raise ValueError("poll_interval must be an integer")
     verification_data = get_source_from_etherscan(chain_id, address)
-    return _verify_contract(address, verification_data)
+    if 'vyper' in verification_data['compiler_version'].lower():
+        print('\033[93m' + f'\033[1mWarning\033[0m\033[93m: Vyper contracts are not supported by Etherscan API. This contract must be manually verified.' + '\033[0m')
+        return 0
+    guid = _verify_contract(address, verification_data, print_debug)
+    status = check_verification_status(guid, print_debug)
+    return
+
+def check_verification_status(guid, print_debug=False, poll_interval=5):
+    if not isinstance(poll_interval, int):
+        raise ValueError("poll_interval must be an integer")
+    time.sleep(8) # First request we wait a bit longer to let etherscan catch up
+    url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=checkverifystatus&guid={guid}&apikey={ETHERSCAN_KEY}'
+    fail_count = 0
+    while True:
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise ConnectionError(
+                f"Status {response.status_code} when querying {url}: {response.text}"
+            )
+        data = response.json()
+        if data["result"] == "Pending in queue":
+            print("Verification pending...")
+        elif "Unable to locate ContractCode" in data["result"]:
+            fail_count += 1
+            if print_debug:
+                print(f"Verification attempt {fail_count} response:\n{data['result']}")
+            if fail_count * poll_interval > 90: # 90s timeout
+                print(f"\033[91mVerification failed. {data['result']}\033[0m")
+                break
+            time.sleep(poll_interval)
+            continue
+        else:
+            print(f"\033[92mVerification complete. {data['result']}\033[0m")
+            return data["message"] == "OK"
+        time.sleep(poll_interval)
+
+def is_contract_verified(chain_id, address):
+    api_url_base = f'{ETHERSCAN_API_BASE_V2}/'
+    url = f'{api_url_base}/api?chainid={chain_id}&module=contract&action=getabi&address={address}&apikey={ETHERSCAN_KEY}'
+    # Example https://api.etherscan.io/v2/api?chainid=56&module=contract&action=getabi&address=0x254A93feff3BEeF9cA004E913bB5443754e8aB19&apikey=WWXDQQFTHKP1Z3W7J9IE1WDT2SWPFQPPV9
+    response = requests.get(url)
+    data = response.json()
+    return response.status_code != 200 or data['message'] != 'NOTOK'
+
+def get_chain_name(chain_id):
+    return NETWORKS[chain_id]['name'] if chain_id in NETWORKS else 'unknown-chain'
