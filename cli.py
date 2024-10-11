@@ -147,7 +147,7 @@ class YearnV3Deployer:
             is_set_emoji = data['is_set']
             computed_address = data['computed_address']
             is_verified = data['is_verified']
-            print(f"{i:2}. {key:<24.24} | {self.color_address(True, self.ZERO_ADDRESS if not address else address):<42} | {deployed:<4} | {emojify(is_verified):<4} |{is_set_emoji:<4} ")
+            print(f"{i:2}. {key:<24.24} | {self.color_address(True, self.ZERO_ADDRESS if not computed_address else computed_address):<42} | {deployed:<4} | {emojify(is_verified):<4} |{is_set_emoji:<4} ")
 
     def interact_with_contract(self, selected_contract):
         key = selected_contract['key']  # Get the key (contract name)
