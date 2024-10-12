@@ -58,7 +58,7 @@ def compute_create2_address(web3, factory, salt, creation_code, print_debug=Fals
 def deploy_create2(web3, factory, salt, creation_code):
     if not has_code_at_address(web3, factory):
         print(f"\n\033[91mError: Deployer {factory} does not exist on chain id {web3.eth.chain_id} ... Now exiting.\033[0m\n")
-        return
+        return False
     
     # Validate salt
     if isinstance(salt, int):
@@ -116,12 +116,7 @@ def deploy_create2(web3, factory, salt, creation_code):
             'chainId': web3.eth.chain_id
         })
 
-    # Sign the transaction
     signed_txn = account.sign_transaction(transaction)
-    # print(signed_txn)
-    # print("Signed Transaction:")
-    # print(f"  Raw: {signed_txn.rawTransaction.hex()}")
-    # print(f"  Hash: {signed_txn.hash.hex()}")
     
     try:
         tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
@@ -147,7 +142,7 @@ def deploy_create2(web3, factory, salt, creation_code):
         
     except Exception as e:
         print(f"\nError processing transaction: {str(e)}")
-        return None
+        return False
 
     # Process all events in the receipt
     print(f"\nDeployed at: \033[92m{deployment_address}\033[0m\n")
