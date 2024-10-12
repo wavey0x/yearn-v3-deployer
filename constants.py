@@ -36,7 +36,7 @@ NETWORKS = {
     },
     100: {
         'name': 'Gnosis',
-        'rpc': 'https://rpc.ankr.com/gnosis'
+        'rpc': 'https://1rpc.io/gnosis'
     },
     252: {
         'name': 'Fraxtal',
@@ -45,5 +45,9 @@ NETWORKS = {
     56: {
         'name': 'Binance Smart Chain',
         'rpc': 'https://bsc.meowrpc.com',
+    },
+    534352: {
+        'name': 'Scroll',
+        'rpc': 'https://scroll.drpc.org'
     }
 }

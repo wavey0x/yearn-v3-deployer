@@ -90,15 +90,15 @@ def deploy_create2(web3, factory, salt, creation_code):
     account = web3.eth.account.from_key(private_key)
     priority_fee = int(1e5)
     max_fee_per_gas = web3.eth.gas_price
-    gas_limit = 20_000_000
-    print(f"Gas price: {max_fee_per_gas / 1e9:,.4f} gwei | Priority fee: {priority_fee / 1e9:,.4f} gwei | Gas limit: {gas_limit / 1e6:.2f}M")
+    # gas_limit = web3.eth.estimate_gas(transaction)
+    print(f"Gas price: {max_fee_per_gas / 1e9:,.4f} gwei | Priority fee: {priority_fee / 1e9:,.4f} gwei")
     # Build the transaction
 
     if factory == DEPLOYERS['CREATEX']:
         create_x = web3.eth.contract(address=CREATE_X_ADDRESS, abi=load_abi('CreateX'))
         transaction = create_x.functions.deployCreate2(salt, creation_code).build_transaction({
             'from': account.address,
-            'gas': gas_limit,  # Adjust gas limit as needed
+            # 'gas': gas_limit,  # Adjust gas limit as needed
             'maxFeePerGas': max_fee_per_gas,
             # 'maxPriorityFeePerGas': priority_fee,
             'nonce': web3.eth.get_transaction_count(account.address),
@@ -109,7 +109,7 @@ def deploy_create2(web3, factory, salt, creation_code):
         salt = int.from_bytes(salt, 'big')
         transaction = factory.functions.deploy(creation_code, salt).build_transaction({
             'from': account.address,
-            'gas': gas_limit,  # Adjust gas limit as needed
+            # 'gas': gas_limit,  # Adjust gas limit as needed
             'maxFeePerGas': max_fee_per_gas,
             'maxPriorityFeePerGas': priority_fee,
             'nonce': web3.eth.get_transaction_count(account.address),
@@ -118,13 +118,15 @@ def deploy_create2(web3, factory, salt, creation_code):
 
     # Sign the transaction
     signed_txn = account.sign_transaction(transaction)
-
+    # print(signed_txn)
+    # print("Signed Transaction:")
+    # print(f"  Raw: {signed_txn.rawTransaction.hex()}")
+    # print(f"  Hash: {signed_txn.hash.hex()}")
+    
     try:
-        tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
-        print(f'Sending txn: 0x{tx_hash.hex()}')
-        
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
         # Wait for the transaction receipt with a loading animation and timeout
-        print("Waiting for transaction to be mined", end="")
+        print(f"Waiting for transaction to be mined: 0x{tx_hash.hex()}", end="")
         spinner = "|/-\\"
         idx = 0
         start_time = time.time()
@@ -167,6 +169,8 @@ def has_code_at_address(web3, deployment_address):
     return code != b''
 
 def emojify(some_bool):
+    if some_bool is None:
+        return '    '
     return "✅" if some_bool else "❌"
 
 def generate_salt(salt_string):
@@ -342,13 +346,14 @@ def _verify_contract(address, verification_data, print_debug=False):
         print(f'Verification info submitted for {data["contractaddress"]} on chain id: {data["chainId"]}')
     return guid
 
-def verify_contract(chain_id, address, print_debug=False, poll_interval=5):
+def verify_contract(chain_id, address, print_debug=False, poll_interval=5, wait_before_request=10):
     if not isinstance(poll_interval, int):
         raise ValueError("poll_interval must be an integer")
     verification_data = get_source_from_etherscan(chain_id, address)
     if 'vyper' in verification_data['compiler_version'].lower():
         print('\033[93m' + f'\033[1mWarning\033[0m\033[93m: Vyper contracts are not supported by Etherscan API. This contract must be manually verified.' + '\033[0m')
         return 0
+    time.sleep(wait_before_request) # Before request, we wait a bit to let etherscan catch up
     guid = _verify_contract(address, verification_data, print_debug)
     status = check_verification_status(guid, print_debug)
     return
@@ -356,7 +361,7 @@ def verify_contract(chain_id, address, print_debug=False, poll_interval=5):
 def check_verification_status(guid, print_debug=False, poll_interval=5):
     if not isinstance(poll_interval, int):
         raise ValueError("poll_interval must be an integer")
-    time.sleep(8) # First request we wait a bit longer to let etherscan catch up
+    time.sleep(poll_interval)
     url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=checkverifystatus&guid={guid}&apikey={ETHERSCAN_KEY}'
     fail_count = 0
     while True:
@@ -385,7 +390,6 @@ def check_verification_status(guid, print_debug=False, poll_interval=5):
 def is_contract_verified(chain_id, address):
     api_url_base = f'{ETHERSCAN_API_BASE_V2}/'
     url = f'{api_url_base}/api?chainid={chain_id}&module=contract&action=getabi&address={address}&apikey={ETHERSCAN_KEY}'
-    # Example https://api.etherscan.io/v2/api?chainid=56&module=contract&action=getabi&address=0x254A93feff3BEeF9cA004E913bB5443754e8aB19&apikey=WWXDQQFTHKP1Z3W7J9IE1WDT2SWPFQPPV9
     response = requests.get(url)
     data = response.json()
     return response.status_code != 200 or data['message'] != 'NOTOK'
