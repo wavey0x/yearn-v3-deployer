@@ -90,7 +90,7 @@ class YearnV3Deployer:
                     0 if not info['salt'] else info['salt'], 
                     fetch_creation_code(address)
                 )
-            
+   
             self.contract_data[key] = {
                 'key': key,
                 'address': address,

@@ -33,14 +33,8 @@ def compute_create2_address(web3, factory, salt, creation_code, print_debug=Fals
             raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
         salt = salt[2:] if salt.startswith('0x') else salt
         
-
-    # Note: We dont need this if we pass the original salt to createx
-    # For CreateX, the salt is a keccak256 hash of the original salt
-    # if factory == DEPLOYERS['CREATEX']:
-    #     salt = web3.keccak(hexstr=salt).hex()
-        
     salt = web3.to_bytes(hexstr=salt) if isinstance(salt, str) else salt
-        
+
     init_code_hash = web3.keccak(hexstr=creation_code)
 
     # Compute CREATE2 address
@@ -117,9 +111,9 @@ def deploy_create2(web3, factory, salt, creation_code):
         })
 
     signed_txn = account.sign_transaction(transaction)
-    
+
     try:
-        tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
         # Wait for the transaction receipt with a loading animation and timeout
         print(f"Waiting for transaction to be mined: 0x{tx_hash.hex()}", end="")
         spinner = "|/-\\"
