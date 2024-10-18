@@ -18,15 +18,15 @@ V3_PROTOCOL_ADDRESSES = {
     },
     'address_provider': {
         'name': 'AddressProvider.sol',
-        'address': '0x1e9778aAD41Aa3E0884C276fB4C2D03C4036Aa0B',
+        'address': '0x775F09d6f3c8D2182DFA8bce8628acf51105653c',
         'id': 'ADDRESS PROVIDER',
-        'salt_preimage': '0x4bee2c2f956cf45fd11afbff2210b9ea37a48bf5fd2a3d12a1d1337d5e8f101e',
-        'salt': 'E73A7A1B14BBE30BBF03553EFE35C214D43215F1D25EEC45D0613B29418C696E',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000',
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'accountant_factory': {
         'name': 'AccountantFactory.sol',
-        'id': 'ACCOUNTANT FACTORY',
+        'id': 'Accountant Factory',
         'address': '0xF728f839796a399ACc2823c1e5591F05a31c32d1',
         'salt_preimage': '0x6d19e04f85bfa39ce8b6908668c46b2937461f0373aaa91c7619f2364545887d',
         'salt': 'AC9071465478B5F512A3E643F4E60A2B73D82CA7CA34069F6F323FDAF379A886',
@@ -42,10 +42,10 @@ V3_PROTOCOL_ADDRESSES = {
     },
     'registry_factory': {
         'name': 'RegistryFactory.sol',
-        'address': '0x8648FF16ed48FAD456BF0e0e2190AeA8710BdC81',
-        'id': 'REGISTRY FACTORY',
-        'salt_preimage': '0x872491a30d60d598962de6e7b834ab76b2aa65fbab102c6ebaaae6acdc238822',
-        'salt': 'E7D2E348FD5170DC047F1017CB189DF6CA153AA32DAE3805D098DADCC9770DB9',
+        'address': '0x3A0fa8aac82aD94048098D6af6e8eB36c98816A1',
+        'id': 'Registry Factory',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000',
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'vault_factory': {
@@ -59,7 +59,7 @@ V3_PROTOCOL_ADDRESSES = {
     'splitter_factory': {
         'name': 'SplitterFactory.vy',
         'address': '0xe28fCC9FB2998ba57754789F6666DAa8C815614D',
-        'id': 'SPLITTER FACTORY',
+        'id': 'Splitter Factory',
         'salt_preimage': '0x4f63ede797a190c28b8121ae0f2ebc20ac89032ab047d98aeb464b20e2fcdf7a',
         'salt': '13ECA8D94F3DA78059363A546A770E520526A76D822F88F7E2500AFAD7332733',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
@@ -74,58 +74,58 @@ V3_PROTOCOL_ADDRESSES = {
     },
     'release_registry': {
         'name': 'ReleaseReigstry.sol',
-        'address': '0x990089173D5d5287c344092Be0bB37950A67d17B',
-        'id': 'RELEASE REGISTRY',
-        'salt_preimage': 61126846202173470780239454055476050204342965826331442198108521154130340972578,
-        'salt': 61126846202173470780239454055476050204342965826331442198108521154130340972578,
-        'deployer': '0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112'
+        'address': '0x0377b4daDDA86C89A0091772B79ba67d0E5F7198',
+        'id': 'Release Registry',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000',
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
+        'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'base_fee_provider': {
         'name': 'BaseFeeProvider.sol',
         'address': '0xe0514dD71cfdC30147e76f65C30bdF60bfD437C3',
-        'id': 'BASE FEE PROVIDER',
+        'id': 'Base Fee Provider',
         'salt_preimage': 0,
         'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed' # CREATE1
     },
     'apr_oracle': {
         'name': 'AprOracle.sol',
-        'address': '0x27aD2fFc74F74Ed27e1C0A19F1858dD0963277aE',
-        'id': 'APR ORACLE',
-        'salt_preimage': '0x92308d754fefe74f180a813f808c0966735868624696943110ce3b77ef4da6fc', # Value passed into CreateX
-        'salt': '300044A4E6C832AAA06DA4F2AEE13EE67F62388F2A4F5E57AD6E86C8CB843D19', # Processed salt used in create2
+        'address': '0x1981AD9F44F2EA9aDd2dC4AD7D075c102C70aF92',
+        'id': 'APR Oracle',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000', # Value passed into CreateX
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563', # Processed salt used in create2
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'common_report_trigger': {
         'name': 'CommonReportTrigger.sol',
-        'address': '0xD98C652f02E7B987e0C258a43BCa9999DF5078cF',
-        'id': 'COMMON REPORT TRIGGER',
-        'salt_preimage': 96024494127036433653418792335021124045183520027330983676371068081276756155280,
-        'salt': 96024494127036433653418792335021124045183520027330983676371068081276756155280,
-        'deployer': '0x8D85e7c9A4e369E53Acc8d5426aE1568198b0112'
+        'address': '0xA045D4dAeA28BA7Bfe234c96eAa03daFae85A147',
+        'id': 'Common Report Trigger',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000',
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
+        'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'keeper': {
         'name': 'Keeper.sol',
         'address': '0x52605BbF54845f520a3E94792d019f62407db2f8',
-        'id': 'KEEPER',
+        'id': 'Keeper',
         'salt_preimage': '0x7cc943b2ded12c38a61c6da1aba5b5ce13b561acc23a95b3df121765c5e5af20',
         'salt': 'CE9FB45842E90271765DB6D885A5977664D8168AE146A33DBF4ADDD5A6D51FBC',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'role_manager_factory': {
         'name': 'RoleManagerFactory.sol',
-        'address': '',
-        'id': 'ROLE MANAGER FACTORY',
-        'salt_preimage': '',
-        'salt': '',
-        'deployer': ''
+        'address': '0xca12459a931643BF28388c67639b3F352fe9e5Ce',
+        'id': 'Role Manager Factory',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000',
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
+        'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'allocator_factory': {
         'name': 'AllocatorFactory.sol',
-        'address': '',
-        'id': 'ALLOCATOR FACTORY',
-        'salt_preimage': '',
-        'salt': '',
-        'deployer': ''
+        'address': '0x03D43dF6FF894C848fC6F1A0a7E8a539Ef9A4C18',
+        'id': 'Debt Allocator Factory',
+        'salt_preimage': '0000000000000000000000000000000000000000000000000000000000000000',
+        'salt': '290DECD9548B62A8D60345A988386FC84BA6BC95484008F6362F93160EF3E563',
+        'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     }
 }
