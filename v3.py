@@ -5,7 +5,7 @@ from utils import load_abi, fetch_creation_code, verify_contract, compute_create
 import tqdm
 import os
 from dotenv import load_dotenv
-from constants import ADDRESS_PROVIDER, NETWORKS
+from constants import ADDRESS_PROVIDER, NETWORKS, CREATE_X_ADDRESS
 from addresses import V3_PROTOCOL_ADDRESSES
 from eth_account import Account
 
@@ -87,7 +87,7 @@ class YearnV3Deployer:
                 computed_address = compute_create2_address(
                     self.web3, 
                     info['deployer'], 
-                    0 if not info['salt'] else info['salt'], 
+                    info['salt'] if info['salt'] else 0, 
                     fetch_creation_code(address)
                 )
    
@@ -137,7 +137,6 @@ class YearnV3Deployer:
                     continue
             elif choice.isdigit() and 1 <= int(choice) <= len(self.contract_data):
                 selected_contract = list(self.contract_data.values())[int(choice)-1]
-                print(selected_contract)
                 self.interact_with_contract(selected_contract)
             else:
                 print("Invalid selection. Please try again.")
@@ -200,7 +199,7 @@ class YearnV3Deployer:
             if confirm:
                 chain_name = get_chain_name(self.web3.eth.chain_id)
                 print(f'Deploying {V3_PROTOCOL_ADDRESSES[key]["name"]} to {chain_name} ...')
-                success = deploy_create2(self.web3, info['deployer'], info['salt_preimage'], creation_code)
+                success = deploy_create2(self.web3, info['deployer'], info['salt'], creation_code)
                 if success:
                     self.update_contract_data(key)
             else:
@@ -225,11 +224,10 @@ class YearnV3Deployer:
             address_from_provider = self.address_provider.functions.getAddress(id).call()
         except Exception as e:
             address_from_provider = None
-
         computed_address = compute_create2_address(
             self.web3, 
             info['deployer'], 
-            0 if not info['salt'] else info['salt'], 
+            info['salt'] if info['salt'] else 0, 
             fetch_creation_code(address)
         )
 
@@ -263,16 +261,19 @@ class YearnV3Deployer:
 
     def deploy_contract(self, contract_key):
         info = V3_PROTOCOL_ADDRESSES[contract_key]
-        salt_preimage = info['salt_preimage']
-        address = info['address']
-        creation_code = fetch_creation_code(address)
-        computed_address = compute_create2_address(self.web3, info['deployer'], info['salt'], creation_code)
+        creation_code = fetch_creation_code(info['address'])
+        computed_address = compute_create2_address(
+            self.web3, 
+            info['deployer'], 
+            info['salt'], 
+            creation_code
+        )
         
         if has_code_at_address(self.web3, computed_address):
             print(f'{contract_key.capitalize()} already deployed at {computed_address}!')
             return False
         else:
-            return deploy_create2(self.web3, info['deployer'], salt_preimage, creation_code)
+            return deploy_create2(self.web3, info['deployer'], info['salt'], creation_code)
 
     def color_address(self, is_true, value):
         color = "\033[94m" if is_true else "\033[93m"
@@ -308,7 +309,7 @@ class YearnV3Deployer:
                     self.update_contract_data(data['key'])
             except Exception as e:
                 print(f"Error deploying {contract_name}: {str(e)}")
-        print("Finished deploying all undeployed contracts.")
+        print("\nFinished deploying all undeployed contracts.")
 
 @click.group()
 def cli():

@@ -20,7 +20,6 @@ def compute_create2_address(web3, factory, salt, creation_code, print_debug=Fals
     """
     If using createx, salt must be the guarded salt generated internally by createx
     """
-    global CREATE_X
     if print_debug:
         print(f"Factory: {factory}")
         print(f"Salt: {salt}")
@@ -28,12 +27,17 @@ def compute_create2_address(web3, factory, salt, creation_code, print_debug=Fals
     if isinstance(salt, int):
         if salt.bit_length() > 256:
             raise ValueError("Salt integer must be 32 bytes or less")
-        salt = hex(salt)[2:]
+        salt = salt.to_bytes(32, 'big').hex()
     elif isinstance(salt, str):
         if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
             raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
         salt = salt[2:] if salt.startswith('0x') else salt
-        
+    
+    if factory == DEPLOYERS['CREATEX']:
+        if isinstance(salt, bytes):
+            salt = salt.hex()
+        salt = web3.keccak(hexstr=salt).hex()
+
     salt = web3.to_bytes(hexstr=salt) if isinstance(salt, str) else salt
 
     init_code_hash = web3.keccak(hexstr=creation_code)
@@ -47,7 +51,6 @@ def compute_create2_address(web3, factory, salt, creation_code, print_debug=Fals
             init_code_hash
         )[12:]
     )
-    
     return address
 
 def deploy_create2(web3, factory, salt, creation_code):
@@ -64,10 +67,6 @@ def deploy_create2(web3, factory, salt, creation_code):
         if len(salt) != 64 and len(salt) != 66: # Account for 0x chars
             raise ValueError("Salt hex string must be 32 bytes (64 characters) long")
         salt = salt[2:] if salt.startswith('0x') else salt
-    
-    final_salt = salt
-    if factory == DEPLOYERS['CREATEX']:
-        final_salt = web3.keccak(hexstr=salt).hex()
 
     salt = web3.to_bytes(hexstr=salt)
 
@@ -75,12 +74,11 @@ def deploy_create2(web3, factory, salt, creation_code):
     private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
     if not private_key:
         raise ValueError("Private key not found in .env file")
-
+    
     # Get the account from the private key
-    deployment_address = compute_create2_address(web3, factory, final_salt, creation_code)
-
+    deployment_address = compute_create2_address(web3, factory, salt, creation_code)
     if has_code_at_address(web3, deployment_address):
-        print(f"Contract already deployed at {deployment_address}. Now exiting.")
+        print(f"Contract already deployed at {deployment_address} - Now exiting.")
         return deployment_address
     account = web3.eth.account.from_key(private_key)
     priority_fee = int(1e5)
@@ -140,7 +138,7 @@ def deploy_create2(web3, factory, salt, creation_code):
         return False
 
     # Process all events in the receipt
-    print(f"\nDeployed at: \033[92m{deployment_address}\033[0m\n")
+    print(f"\nDeployed at: \033[92m{deployment_address}\033[0m")
     verify_contract(web3.eth.chain_id, deployment_address)
     return deployment_address
 
@@ -342,7 +340,7 @@ def _verify_contract(address, verification_data, print_debug=False):
         print(f'Unexpected response structure when verifying {data["contractaddress"]} on chain id: {data["chainId"]}:\n{response.json()}')
         return False
     if success:
-        print(f'Verification info submitted for {data["contractaddress"]} on chain id: {data["chainId"]}')
+        print(f'Verification info submitted...')
     return guid
 
 def verify_contract(chain_id, address, print_debug=False, poll_interval=5, wait_before_request=10):
@@ -387,13 +385,12 @@ def check_verification_status(chain_id, guid, print_debug=False, poll_interval=5
             time.sleep(poll_interval)
             continue
         else:
-            print(f"\033[92mVerification complete. {data['result']}\033[0m")
+            print(f"Verification complete with status: \033[92m{data['result']}\033[0m")
             return data["message"] == "OK"
         time.sleep(poll_interval)
 
 def is_contract_verified(chain_id, address):
-    api_url_base = f'{ETHERSCAN_API_BASE_V2}/'
-    url = f'{api_url_base}/api?&module=contract&action=getabi&chainid={chain_id}address={address}&apikey={ETHERSCAN_KEY}'
+    url = f'{ETHERSCAN_API_BASE_V2}/api?&module=contract&action=getabi&chainid={chain_id}&address={address}&apikey={ETHERSCAN_KEY}'
     response = requests.get(url)
     data = response.json()
     return response.status_code != 200 or data['message'] != 'NOTOK'

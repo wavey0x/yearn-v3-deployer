@@ -10,7 +10,7 @@ Utility to verify a deployed contract on an EVM chain using etherscan.
 Pass params via CLI or set defaults in the function call.
 """
 def main():
-    chain_id = 10
+    chain_id = 56
     mainnet_address = '0x0377b4daDDA86C89A0091772B79ba67d0E5F7198'
     address_to_verify='0x0377b4daDDA86C89A0091772B79ba67d0E5F7198'
     # Get verification data from etherscan
