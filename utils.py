@@ -14,6 +14,7 @@ import sys
 load_dotenv()
 
 ETHERSCAN_KEY = os.getenv('ETHERSCAN_KEY')
+ETHERSCAN_API_BASE = ETHERSCAN_API_BASE_V2
 
 def compute_create2_address(web3, factory, salt, creation_code, print_debug=False):
     """
@@ -281,8 +282,11 @@ class CustomJSONEncoder(json.JSONEncoder):
             return dict(obj)
         return super().default(obj)
     
-def get_source_from_etherscan(chain_id, address):
-    url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=getsourcecode&address={address}&apikey={ETHERSCAN_KEY}'
+def get_source_from_etherscan(chain_id, address, print_debug=False):
+    # For source collection, we hardcode chain id 1 since we assume its already been verified there.
+    url = f'{ETHERSCAN_API_BASE_V2}/api?module=contract&action=getsourcecode&chainid=1&address={address}&apikey={ETHERSCAN_KEY}'
+    if print_debug:
+        print(f'Collecting verification data for {address} from etherscan: {url}')
     response = requests.get(url)
     data = response.json()
     if 'result' not in data:
@@ -305,9 +309,14 @@ def get_source_from_etherscan(chain_id, address):
     return verification_data
 
 def _verify_contract(address, verification_data, print_debug=False):
-    url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
+    chain_id = verification_data['chain_id']
+    url = f'{ETHERSCAN_API_BASE_V2}/api?module=contract&chainid={chain_id}&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
+    if print_debug:
+        print(f'Sending verification paylod for {address} for chain id: {chain_id}')
+        print(f'URL: {url}')
     data = {
-        'chainId': verification_data['chain_id'],
+        'chainId': chain_id,
+        'chainid': chain_id,
         'codeformat': verification_data['code_format'],
         'sourceCode': verification_data['source'],
         'constructorArguements': verification_data['constructor_args'],
@@ -325,6 +334,7 @@ def _verify_contract(address, verification_data, print_debug=False):
         data_to_print = data.copy()
         data_to_print['sourceCode'] = data_to_print['sourceCode'][:20] + '...'
         print(json.dumps(data_to_print, indent=2, cls=CustomJSONEncoder))
+        print(f'\nResponse:\n{response.json()}')
     try:
         success = response.json()['status'] == '1' and response.json()['message'] == 'OK'
         guid = response.json()['result']
@@ -344,15 +354,18 @@ def verify_contract(chain_id, address, print_debug=False, poll_interval=5, wait_
         return 0
     time.sleep(wait_before_request) # Before request, we wait a bit to let etherscan catch up
     guid = _verify_contract(address, verification_data, print_debug)
-    status = check_verification_status(guid, print_debug)
+    status = check_verification_status(chain_id, guid, print_debug=print_debug)
     return
 
-def check_verification_status(guid, print_debug=False, poll_interval=5):
+def check_verification_status(chain_id, guid, print_debug=False, poll_interval=5):
     if not isinstance(poll_interval, int):
         raise ValueError("poll_interval must be an integer")
     time.sleep(poll_interval)
-    url = f'{ETHERSCAN_API_BASE}/api?module=contract&action=checkverifystatus&guid={guid}&apikey={ETHERSCAN_KEY}'
+    url = f'{ETHERSCAN_API_BASE_V2}/api?module=contract&chainid={chain_id}&action=checkverifystatus&guid={guid}&apikey={ETHERSCAN_KEY}'
     fail_count = 0
+    if print_debug:
+        print(f"Checking verification status for {guid}")
+        print(f'URL: {url}')
     while True:
         response = requests.get(url)
         if response.status_code != 200:
@@ -360,6 +373,8 @@ def check_verification_status(guid, print_debug=False, poll_interval=5):
                 f"Status {response.status_code} when querying {url}: {response.text}"
             )
         data = response.json()
+        if print_debug:
+            print(f"Polling for verification status attempt {fail_count+1}: {data['result']}")
         if data["result"] == "Pending in queue":
             print("Verification pending...")
         elif "Unable to locate ContractCode" in data["result"]:
@@ -378,7 +393,7 @@ def check_verification_status(guid, print_debug=False, poll_interval=5):
 
 def is_contract_verified(chain_id, address):
     api_url_base = f'{ETHERSCAN_API_BASE_V2}/'
-    url = f'{api_url_base}/api?chainid={chain_id}&module=contract&action=getabi&address={address}&apikey={ETHERSCAN_KEY}'
+    url = f'{api_url_base}/api?&module=contract&action=getabi&chainid={chain_id}address={address}&apikey={ETHERSCAN_KEY}'
     response = requests.get(url)
     data = response.json()
     return response.status_code != 200 or data['message'] != 'NOTOK'
