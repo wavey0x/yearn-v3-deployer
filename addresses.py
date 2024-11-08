@@ -36,7 +36,7 @@ V3_PROTOCOL_ADDRESSES = {
         'name': 'Vault.vy',
         'address': '0xd8063123BBA3B480569244AE66BFE72B6c84b00d',
         'id': 'VAULT',
-        'salt': '0x6b82dafe35e195e55829e589b42ab27ad15988b069b20615c136226c8a270865',
+        'salt': '0000000000000000000000000000000000000000000000000000000000000000',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'registry_factory': {
@@ -50,7 +50,7 @@ V3_PROTOCOL_ADDRESSES = {
         'name': 'VaultFactory.vy',
         'address': '0x770D0d1Fb036483Ed4AbB6d53c1C88fb277D812F',
         'id': 'VAULT FACTORY',
-        'salt': '0x4b47d8ec7a7a872cad215d467bfbd768c66bf241f9ca127d4a9acbc75332980a',
+        'salt': '0000000000000000000000000000000000000000000000000000000000000000',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'splitter_factory': {
@@ -64,7 +64,7 @@ V3_PROTOCOL_ADDRESSES = {
         'name': 'TokenizedStrategy.sol',
         'address': '0xD377919FA87120584B21279a491F82D5265A139c',
         'id': 'TOKENIZED STRATEGY',
-        'salt': '0x76ce3962b8fa14419a4050782902ebac2d936ba86eb83ca48b362c1cd2d244dc',
+        'salt': '0000000000000000000000000000000000000000000000000000000000000000',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     },
     'release_registry': {
