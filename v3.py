@@ -4,6 +4,9 @@ import requests
 from utils import load_abi, fetch_creation_code, verify_contract, compute_create2_address, has_code_at_address, emojify, is_contract_verified, deploy_create2, get_chain_name
 import tqdm
 import os
+import json
+from pathlib import Path
+from getpass import getpass
 from dotenv import load_dotenv
 from constants import ADDRESS_PROVIDER, NETWORKS, CREATE_X_ADDRESS
 from addresses import V3_PROTOCOL_ADDRESSES
@@ -241,12 +244,16 @@ class YearnV3Deployer:
         }
 
     def get_wallet_info(self, should_print=True):
-        private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
-        if not private_key:
-            print("Error: DEPLOYER_PRIVATE_KEY not found in .env file.")
-            return None, None, None
+        private_key_file = os.getenv('DEPLOYER_KEY_FILE')
+        if private_key_file:
+            account = Account.from_key(self.load_wallet_from_file(private_key_file))
+        else:
+            private_key = os.getenv('DEPLOYER_PRIVATE_KEY')
+            if not private_key:
+                print("Error: DEPLOYER_PRIVATE_KEY not found in .env file.")
+                return None, None, None
+            account = Account.from_key(private_key)
 
-        account = Account.from_key(private_key)
         wallet_address = account.address
         balance = self.web3.eth.get_balance(wallet_address)
         balance_eth = self.web3.from_wei(balance, 'ether')
@@ -254,6 +261,38 @@ class YearnV3Deployer:
             print(f"\nWallet Address: {wallet_address}")
             print(f"Balance: {balance_eth:.4f} ETH")
         return account, wallet_address, balance_eth
+
+    def load_wallet_from_file(
+            self, filename, password = None, allow_retry = True
+        ):
+            filename = str(filename)
+            json_file = Path(filename).expanduser()
+
+            if not json_file.exists() or json_file.is_dir():
+                temp_json_file = json_file.with_suffix(".json")
+                if temp_json_file.exists():
+                    json_file = temp_json_file
+                else:
+                    raise FileNotFoundError(f"Cannot find {json_file}")
+
+            with json_file.open() as fp:
+                encrypted = json.load(fp)
+
+            prompt = f'Enter password for "{json_file.stem}": '
+            while True:
+                if password is None:
+                    password = getpass(prompt)
+                try:
+                    priv_key = self.web3.eth.account.decrypt(encrypted, password)
+                    break
+                except ValueError as e:
+                    if allow_retry:
+                        prompt = "Incorrect password, try again: "
+                        password = None
+                        continue
+                    raise e
+
+            return priv_key
 
     def deploy_protocol(self, chain_name, chain_id):
         print(f"Initiating deployment process for {chain_name}...")
