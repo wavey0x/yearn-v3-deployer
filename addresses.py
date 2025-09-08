@@ -115,5 +115,12 @@ V3_PROTOCOL_ADDRESSES = {
         'id': 'Debt Allocator Factory',
         'salt': '0000000000000000000000000000000000000000000000000000000000000000',
         'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
+    },
+    'auction_factory': {
+        'name': 'AuctionFactory.sol',
+        'address': '0xCfA510188884F199fcC6e750764FAAbE6e56ec40',
+        'id': 'Auction Factory',
+        'salt': '0000000000000000000000000000000000000000000000000000000000000000',
+        'deployer': '0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed'
     }
 }

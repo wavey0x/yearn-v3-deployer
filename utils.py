@@ -83,6 +83,8 @@ def deploy_create2(web3, factory, salt, creation_code):
     account = web3.eth.account.from_key(private_key)
     priority_fee = int(1e5)
     max_fee_per_gas = web3.eth.gas_price
+    #max_fee_per_gas = web3.to_wei(20, 'gwei')
+
     # gas_limit = web3.eth.estimate_gas(transaction)
     print(f"Gas price: {max_fee_per_gas / 1e9:,.4f} gwei | Priority fee: {priority_fee / 1e9:,.4f} gwei")
     # Build the transaction
@@ -280,7 +282,7 @@ class CustomJSONEncoder(json.JSONEncoder):
             return dict(obj)
         return super().default(obj)
     
-def get_source_from_etherscan(chain_id, address, print_debug=False):
+def get_source_from_etherscan(chain_id, address, print_debug=True):
     # For source collection, we hardcode chain id 1 since we assume its already been verified there.
     url = f'{ETHERSCAN_API_BASE_V2}/api?module=contract&action=getsourcecode&chainid=1&address={address}&apikey={ETHERSCAN_KEY}'
     if print_debug:
@@ -306,9 +308,10 @@ def get_source_from_etherscan(chain_id, address, print_debug=False):
     }
     return verification_data
 
-def _verify_contract(address, verification_data, print_debug=False):
+def _verify_contract(address, verification_data, print_debug=True):
     chain_id = verification_data['chain_id']
     url = f'{ETHERSCAN_API_BASE_V2}/api?module=contract&chainid={chain_id}&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
+    #url = f'https://api.berascan.com/api?module=contract&chainid={chain_id}&action=verifysourcecode&apikey={ETHERSCAN_KEY}'
     if print_debug:
         print(f'Sending verification paylod for {address} for chain id: {chain_id}')
         print(f'URL: {url}')
@@ -360,6 +363,7 @@ def check_verification_status(chain_id, guid, print_debug=False, poll_interval=5
         raise ValueError("poll_interval must be an integer")
     time.sleep(poll_interval)
     url = f'{ETHERSCAN_API_BASE_V2}/api?module=contract&chainid={chain_id}&action=checkverifystatus&guid={guid}&apikey={ETHERSCAN_KEY}'
+    #url = f'https://api.berascan.com/api?module=contract&chainid={chain_id}&action=checkverifystatus&guid={guid}&apikey={ETHERSCAN_KEY}'
     fail_count = 0
     if print_debug:
         print(f"Checking verification status for {guid}")
